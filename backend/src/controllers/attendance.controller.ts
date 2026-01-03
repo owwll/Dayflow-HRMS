@@ -25,7 +25,8 @@ export class AttendanceController {
     async checkOut(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const { attendanceId, location } = req.body;
-            const result = await attendanceService.checkOut(req.user!.userId, attendanceId, location);
+            // attendanceId is optional - if not provided, service will find today's record
+            const result = await attendanceService.checkOut(req.user!.userId, attendanceId || null, location);
 
             const response: ApiResponse = {
                 success: true,

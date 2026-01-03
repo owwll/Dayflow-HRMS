@@ -124,19 +124,8 @@ export default function SignIn() {
             </form>
 
             <div className="mt-6 text-center text-sm">
-              <span className="text-muted-foreground">Don't have an account? </span>
-              <Link to="/signup" className="font-medium text-primary hover:underline">
-                Sign up
-              </Link>
-            </div>
-
-            {/* Demo credentials */}
-            <div className="mt-6 p-4 bg-muted rounded-lg">
-              <p className="text-xs font-medium text-muted-foreground mb-2">Demo Credentials:</p>
-              <div className="space-y-1 text-xs text-muted-foreground">
-                <p><strong>Admin:</strong> admin@dayflow.com / admin123</p>
-                <p><strong>Employee:</strong> john@dayflow.com / employee123</p>
-              </div>
+              <span className="text-muted-foreground">Need help? </span>
+              <span className="text-muted-foreground">Contact your HR administrator</span>
             </div>
           </CardContent>
         </Card>

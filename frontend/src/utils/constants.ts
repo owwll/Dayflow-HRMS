@@ -51,11 +51,14 @@ export const API_ENDPOINTS = {
     // Notifications
     NOTIFICATIONS: '/notifications',
     MARK_READ: (notificationId: string) => `/notifications/${notificationId}/read`,
+
+    // Analytics/Reports
+    ANALYTICS_HR: '/analytics/hr',
 } as const;
 
 // Route Paths
 export const ROUTES = {
-    LOGIN: '/login',
+    LOGIN: '/signin',
     CHANGE_PASSWORD: '/change-password',
     DASHBOARD: '/dashboard',
     PROFILE: '/profile',

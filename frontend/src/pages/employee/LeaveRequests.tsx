@@ -12,45 +12,52 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CalendarDays, Plus, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { CalendarDays, Plus, CheckCircle2, XCircle, Clock, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-
-interface LeaveRequest {
-  id: string;
-  employeeId: string;
-  employeeName?: string;
-  type: string;
-  startDate: string;
-  endDate: string;
-  days: number;
-  reason: string;
-  status: 'pending' | 'approved' | 'rejected';
-  appliedDate: string;
-}
-
-const LEAVES_KEY = 'dayflow_leaves';
+import { leaveService } from '@/services/leave.service';
+import { LeaveRequest as LeaveRequestType, LeaveType } from '@/types';
 
 export default function LeaveRequests() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
+  const [leaves, setLeaves] = useState<LeaveRequestType[]>([]);
+  const [leaveBalance, setLeaveBalance] = useState({ paid: 0, sick: 0, unpaid: 0 });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    type: 'Paid Leave',
+    type: 'paid' as LeaveType,
     startDate: '',
     endDate: '',
     reason: '',
+    attachment: null as File | null,
   });
 
   useEffect(() => {
-    const stored = localStorage.getItem(LEAVES_KEY);
-    if (stored) {
-      const allLeaves: LeaveRequest[] = JSON.parse(stored);
-      const userLeaves = allLeaves.filter(l => l.employeeId === user?.employeeId);
-      setLeaves(userLeaves);
-    }
+    fetchLeaves();
   }, [user]);
+
+  const fetchLeaves = async () => {
+    setIsLoading(true);
+    try {
+      const response = await leaveService.getLeaveRequests(undefined, 1, 100);
+      setLeaves(response.requests || []);
+      // Support different API shapes: `balances` (frontend), `balance` (backend), or `leaveBalance`
+      const balances = (response as any).balances || (response as any).balance || (response as any).leaveBalance;
+      if (balances) {
+        setLeaveBalance(balances);
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error?.message || 'Failed to fetch leave requests',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const calculateDays = (start: string, end: string) => {
     if (!start || !end) return 0;
@@ -61,7 +68,7 @@ export default function LeaveRequests() {
     return diffDays;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formData.startDate || !formData.endDate || !formData.reason) {
       toast({
         title: 'Validation Error',
@@ -81,41 +88,41 @@ export default function LeaveRequests() {
       return;
     }
 
-    const stored = localStorage.getItem(LEAVES_KEY);
-    const allLeaves: LeaveRequest[] = stored ? JSON.parse(stored) : [];
+    setIsSubmitting(true);
+    try {
+      await leaveService.applyLeave({
+        leaveType: formData.type,
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        reason: formData.reason,
+        attachment: formData.attachment || undefined,
+      });
 
-    const newLeave: LeaveRequest = {
-      id: `leave_${Date.now()}`,
-      employeeId: user?.employeeId || '',
-      employeeName: user ? `${user.firstName} ${user.lastName}` : '',
-      type: formData.type,
-      startDate: formData.startDate,
-      endDate: formData.endDate,
-      days,
-      reason: formData.reason,
-      status: 'pending',
-      appliedDate: format(new Date(), 'yyyy-MM-dd'),
-    };
+      toast({
+        title: 'Leave request submitted',
+        description: 'Your leave request has been submitted for approval',
+      });
 
-    allLeaves.push(newLeave);
-    localStorage.setItem(LEAVES_KEY, JSON.stringify(allLeaves));
-    setLeaves([...leaves, newLeave]);
-
-    setIsDialogOpen(false);
-    setFormData({ type: 'Paid Leave', startDate: '', endDate: '', reason: '' });
-
-    toast({
-      title: 'Leave request submitted',
-      description: 'Your leave request has been submitted for approval',
-    });
+      setIsDialogOpen(false);
+      setFormData({ type: 'paid', startDate: '', endDate: '', reason: '', attachment: null });
+      await fetchLeaves(); // Refresh the list
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error?.message || 'Failed to submit leave request',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const pendingLeaves = leaves.filter(l => l.status === 'pending');
-  const approvedLeaves = leaves.filter(l => l.status === 'approved');
-  const rejectedLeaves = leaves.filter(l => l.status === 'rejected');
+  const pendingLeaves = leaves.filter(l => (l.status || '').toLowerCase() === 'pending');
+  const approvedLeaves = leaves.filter(l => (l.status || '').toLowerCase() === 'approved');
+  const rejectedLeaves = leaves.filter(l => (l.status || '').toLowerCase() === 'rejected');
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
+    switch (status?.toLowerCase()) {
       case 'approved':
         return <Badge variant="default" className="bg-green-500">Approved</Badge>;
       case 'rejected':
@@ -123,11 +130,24 @@ export default function LeaveRequests() {
       case 'pending':
         return <Badge variant="secondary">Pending</Badge>;
       default:
-        return <Badge variant="secondary">{status}</Badge>;
+        return <Badge variant="secondary">{status || 'Unknown'}</Badge>;
     }
   };
 
-  const renderTable = (leaveList: LeaveRequest[]) => (
+  const getLeaveTypeLabel = (type: string) => {
+    switch (type?.toLowerCase()) {
+      case 'paid':
+        return 'Paid Leave';
+      case 'sick':
+        return 'Sick Leave';
+      case 'unpaid':
+        return 'Unpaid Leave';
+      default:
+        return type || 'Leave';
+    }
+  };
+
+  const renderTable = (leaveList: LeaveRequestType[]) => (
     <Table>
       <TableHeader>
         <TableRow>
@@ -147,18 +167,25 @@ export default function LeaveRequests() {
             </TableCell>
           </TableRow>
         ) : (
-          leaveList.map((leave) => (
-            <TableRow key={leave.id}>
-              <TableCell className="font-medium">{leave.type}</TableCell>
-              <TableCell>
-                {format(new Date(leave.startDate), 'MMM dd')} - {format(new Date(leave.endDate), 'MMM dd, yyyy')}
-              </TableCell>
-              <TableCell>{leave.days} day{leave.days > 1 ? 's' : ''}</TableCell>
-              <TableCell className="max-w-xs truncate">{leave.reason}</TableCell>
-              <TableCell>{format(new Date(leave.appliedDate), 'MMM dd, yyyy')}</TableCell>
-              <TableCell>{getStatusBadge(leave.status)}</TableCell>
-            </TableRow>
-          ))
+          leaveList.map((leave) => {
+            const startDateObj = leave.startDate ? new Date(leave.startDate) : null;
+            const endDateObj = leave.endDate ? new Date(leave.endDate) : null;
+            const startLabel = startDateObj && !isNaN(startDateObj.getTime()) ? format(startDateObj, 'MMM dd') : 'N/A';
+            const endLabel = endDateObj && !isNaN(endDateObj.getTime()) ? format(endDateObj, 'MMM dd, yyyy') : 'N/A';
+            const appliedObj = (leave.appliedOn || leave.appliedDate) ? new Date(leave.appliedOn || leave.appliedDate) : null;
+            const appliedLabel = appliedObj && !isNaN(appliedObj.getTime()) ? format(appliedObj, 'MMM dd, yyyy') : 'N/A';
+            const days = (leave.duration || leave.days) || 0;
+            return (
+              <TableRow key={leave.id}>
+                <TableCell className="font-medium">{getLeaveTypeLabel(leave.leaveType || leave.type)}</TableCell>
+                <TableCell>{startLabel} - {endLabel}</TableCell>
+                <TableCell>{days} day{days > 1 ? 's' : ''}</TableCell>
+                <TableCell className="max-w-xs truncate">{leave.reason}</TableCell>
+                <TableCell>{appliedLabel}</TableCell>
+                <TableCell>{getStatusBadge(leave.status)}</TableCell>
+              </TableRow>
+            );
+          })
         )}
       </TableBody>
     </Table>
@@ -195,16 +222,15 @@ export default function LeaveRequests() {
                   <Label htmlFor="type">Leave Type</Label>
                   <Select
                     value={formData.type}
-                    onValueChange={(value) => setFormData({ ...formData, type: value })}
+                    onValueChange={(value) => setFormData({ ...formData, type: value as LeaveType })}
                   >
                     <SelectTrigger id="type">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Paid Leave">Paid Leave</SelectItem>
-                      <SelectItem value="Sick Leave">Sick Leave</SelectItem>
-                      <SelectItem value="Unpaid Leave">Unpaid Leave</SelectItem>
-                      <SelectItem value="Personal Leave">Personal Leave</SelectItem>
+                      <SelectItem value="paid">Paid Leave</SelectItem>
+                      <SelectItem value="sick">Sick Leave</SelectItem>
+                      <SelectItem value="unpaid">Unpaid Leave</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -245,19 +271,40 @@ export default function LeaveRequests() {
                     rows={4}
                   />
                 </div>
+                {(formData.type === 'sick' || formData.type === 'SICK') && (
+                  <div className="space-y-2">
+                    <Label htmlFor="attachment">Attachment (Optional)</Label>
+                    <Input
+                      id="attachment"
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={(e) => setFormData({ ...formData, attachment: e.target.files?.[0] || null })}
+                    />
+                    <p className="text-xs text-muted-foreground">Upload medical certificate or supporting document</p>
+                  </div>
+                )}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting}>
                   Cancel
                 </Button>
-                <Button onClick={handleSubmit}>Submit Request</Button>
+                <Button onClick={handleSubmit} disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    'Submit Request'
+                  )}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
 
         {/* Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
@@ -291,12 +338,39 @@ export default function LeaveRequests() {
               </div>
             </CardContent>
           </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-muted-foreground">Paid Leave Balance</div>
+                  <div className="text-2xl font-semibold mt-1">{leaveBalance.paid}</div>
+                </div>
+                <CalendarDays className="h-8 w-8 text-blue-500" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-muted-foreground">Sick Leave Balance</div>
+                  <div className="text-2xl font-semibold mt-1">{leaveBalance.sick}</div>
+                </div>
+                <CalendarDays className="h-8 w-8 text-orange-500" />
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Leave Requests Tabs */}
         <Card>
           <CardContent className="pt-6">
-            <Tabs defaultValue="pending" className="w-full">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <Tabs defaultValue="pending" className="w-full">
               <TabsList>
                 <TabsTrigger value="pending">
                   Pending ({pendingLeaves.length})
@@ -318,6 +392,7 @@ export default function LeaveRequests() {
                 {renderTable(rejectedLeaves)}
               </TabsContent>
             </Tabs>
+            )}
           </CardContent>
         </Card>
       </PageContainer>

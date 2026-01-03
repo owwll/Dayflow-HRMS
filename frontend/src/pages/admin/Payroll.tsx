@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageContainer } from '@/components/layout/PageContainer';
@@ -10,10 +10,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { Search, Download, DollarSign, Calendar, Send, Filter, TrendingUp, PieChart, BarChart3 } from 'lucide-react';
+import { Search, Download, DollarSign, Calendar, Send, Filter, TrendingUp, PieChart, BarChart3, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart as RechartsPieChart, Pie, Cell, Legend, LineChart, Line } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
+import { adminService } from '@/services/admin.service';
+import { payrollService } from '@/services/payroll.service';
 
 interface PayrollRecord {
   id: string;
@@ -29,106 +31,121 @@ interface PayrollRecord {
   status: 'pending' | 'processed' | 'paid';
 }
 
-// Extended mock data for better visualization
-const mockPayroll: PayrollRecord[] = [
-  {
-    id: '1',
-    employeeId: 'EMP002',
-    employeeName: 'Rahul Kumar',
-    department: 'Engineering',
-    position: 'Software Developer',
-    baseSalary: 85000,
-    allowances: 15000,
-    deductions: 12000,
-    netSalary: 88000,
-    month: '2024-01',
-    status: 'processed',
-  },
-  {
-    id: '2',
-    employeeId: 'EMP003',
-    employeeName: 'Ananya Patel',
-    department: 'Marketing',
-    position: 'Marketing Specialist',
-    baseSalary: 75000,
-    allowances: 12000,
-    deductions: 10000,
-    netSalary: 77000,
-    month: '2024-01',
-    status: 'paid',
-  },
-  {
-    id: '3',
-    employeeId: 'EMP004',
-    employeeName: 'Vikram Singh',
-    department: 'Sales',
-    position: 'Sales Representative',
-    baseSalary: 60000,
-    allowances: 10000,
-    deductions: 8000,
-    netSalary: 62000,
-    month: '2024-01',
-    status: 'pending',
-  },
-  {
-    id: '4',
-    employeeId: 'EMP005',
-    employeeName: 'Sneha Reddy',
-    department: 'Engineering',
-    position: 'Senior Developer',
-    baseSalary: 120000,
-    allowances: 20000,
-    deductions: 15000,
-    netSalary: 125000,
-    month: '2024-01',
-    status: 'paid',
-  },
-  {
-    id: '5',
-    employeeId: 'EMP006',
-    employeeName: 'Arjun Mehta',
-    department: 'HR',
-    position: 'HR Manager',
-    baseSalary: 95000,
-    allowances: 15000,
-    deductions: 12000,
-    netSalary: 98000,
-    month: '2024-01',
-    status: 'processed',
-  },
-  {
-    id: '6',
-    employeeId: 'EMP007',
-    employeeName: 'Kavya Nair',
-    department: 'Marketing',
-    position: 'Marketing Manager',
-    baseSalary: 100000,
-    allowances: 18000,
-    deductions: 13000,
-    netSalary: 105000,
-    month: '2024-01',
-    status: 'paid',
-  },
-];
-
-// Mock data for previous months (for trends)
-const monthlyTrendData = [
-  { month: 'Oct 2023', total: 450000, paid: 420000, pending: 30000 },
-  { month: 'Nov 2023', total: 470000, paid: 450000, pending: 20000 },
-  { month: 'Dec 2023', total: 490000, paid: 480000, pending: 10000 },
-  { month: 'Jan 2024', total: 510000, paid: 480000, pending: 30000 },
-];
-
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
 export default function Payroll() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [payroll, setPayroll] = useState<PayrollRecord[]>(mockPayroll);
+  const [payroll, setPayroll] = useState<PayrollRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const [isLoading, setIsLoading] = useState(true);
+  const [useDummyData, setUseDummyData] = useState(false);
+
+  // Dummy data for initial display
+  const dummyPayrollData: PayrollRecord[] = [
+    {
+      id: '1',
+      employeeId: 'EMP001',
+      employeeName: 'John Doe',
+      department: 'Engineering',
+      position: 'Software Engineer',
+      baseSalary: 50000,
+      allowances: 15000,
+      deductions: 6200,
+      netSalary: 58800,
+      month: format(new Date(), 'yyyy-MM'),
+      status: 'paid',
+    },
+    {
+      id: '2',
+      employeeId: 'EMP002',
+      employeeName: 'Jane Smith',
+      department: 'Sales',
+      position: 'Sales Manager',
+      baseSalary: 60000,
+      allowances: 12000,
+      deductions: 7200,
+      netSalary: 64800,
+      month: format(new Date(), 'yyyy-MM'),
+      status: 'processed',
+    },
+    {
+      id: '3',
+      employeeId: 'EMP003',
+      employeeName: 'Bob Johnson',
+      department: 'HR',
+      position: 'HR Manager',
+      baseSalary: 55000,
+      allowances: 10000,
+      deductions: 6600,
+      netSalary: 58400,
+      month: format(new Date(), 'yyyy-MM'),
+      status: 'pending',
+    },
+  ];
+
+  useEffect(() => {
+    fetchPayrollData();
+  }, [selectedMonth]);
+
+  const fetchPayrollData = async () => {
+    setIsLoading(true);
+    try {
+      // Fetch all employees
+      const employeesResponse = await adminService.getEmployees(1, 100);
+      const employees = employeesResponse.items.filter(emp => emp.role === 'EMPLOYEE' || emp.role === 'employee');
+
+      // Fetch payroll data for each employee
+      const payrollPromises = employees.map(async (employee) => {
+        try {
+          const payrollData = await payrollService.getPayroll(employee.id);
+          return {
+            id: employee.id,
+            employeeId: employee.employeeId || employee.employeeCode || 'N/A',
+            employeeName: `${employee.firstName} ${employee.lastName}`,
+            department: employee.department || 'N/A',
+            position: employee.position || employee.jobPosition || 'N/A',
+            baseSalary: payrollData.summary.grossSalary * 0.5, // Estimate base salary
+            allowances: payrollData.summary.grossSalary * 0.3, // Estimate allowances
+            deductions: payrollData.summary.totalDeductions,
+            netSalary: payrollData.summary.netSalary,
+            month: selectedMonth,
+            status: 'paid' as const, // Default status
+          };
+        } catch (error) {
+          // If payroll fetch fails for an employee, skip them
+          return null;
+        }
+      });
+
+      const payrollResults = await Promise.all(payrollPromises);
+      const validPayroll = payrollResults.filter((p): p is PayrollRecord => p !== null);
+
+      if (validPayroll.length > 0) {
+        setPayroll(validPayroll);
+        setUseDummyData(false);
+      } else {
+        // If no payroll data found, use dummy data
+        setPayroll(dummyPayrollData);
+        setUseDummyData(true);
+      }
+    } catch (error: any) {
+      console.error('Error fetching payroll data:', error);
+      // Use dummy data on error
+      setPayroll(dummyPayrollData);
+      setUseDummyData(true);
+      toast({
+        title: 'Warning',
+        description: 'Using sample data. API connection failed.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const filteredPayroll = useMemo(() => {
     return payroll.filter((record) => {
@@ -297,6 +314,19 @@ export default function Payroll() {
               </p>
             </div>
             <div className="flex gap-2">
+              <Button variant="outline" onClick={fetchPayrollData} disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Download className="mr-2 h-4 w-4" />
+                    Refresh
+                  </>
+                )}
+              </Button>
               <Button variant="outline" onClick={handleExport}>
                 <Download className="mr-2 h-4 w-4" />
                 Export
@@ -424,7 +454,20 @@ export default function Payroll() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <Table>
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (
+                    <>
+                      {useDummyData && (
+                        <div className="mb-4 p-3 rounded-lg bg-yellow-50 border border-yellow-200">
+                          <p className="text-sm text-yellow-800">
+                            ⚠️ Displaying sample data. Connect to API to view real-time payroll information.
+                          </p>
+                        </div>
+                      )}
+                      <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Employee</TableHead>
@@ -466,6 +509,8 @@ export default function Payroll() {
                       )}
                     </TableBody>
                   </Table>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -478,24 +523,9 @@ export default function Payroll() {
                   <CardDescription>Payroll trends over the last 4 months</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {monthlyTrendData.length > 0 ? (
-                    <ChartContainer config={chartConfig} className="h-[300px]">
-                      <LineChart data={monthlyTrendData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="month" />
-                        <YAxis tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}k`} />
-                        <ChartTooltip content={<ChartTooltipContent />} />
-                        <Legend />
-                        <Line type="monotone" dataKey="total" stroke="#8884d8" name="Total Payroll" strokeWidth={2} />
-                        <Line type="monotone" dataKey="paid" stroke="#22c55e" name="Paid" strokeWidth={2} />
-                        <Line type="monotone" dataKey="pending" stroke="#f59e0b" name="Pending" strokeWidth={2} />
-                      </LineChart>
-                    </ChartContainer>
-                  ) : (
-                    <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                      No data available for trends
-                    </div>
-                  )}
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    No data available for trends
+                  </div>
                 </CardContent>
               </Card>
 

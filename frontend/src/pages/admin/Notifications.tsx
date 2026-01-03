@@ -1,65 +1,47 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Bell, CheckCircle2, AlertCircle, Info, XCircle, Trash2 } from 'lucide-react';
+import { Bell, CheckCircle2, AlertCircle, Info, XCircle, Trash2, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
-
-interface Notification {
-  id: string;
-  type: 'success' | 'warning' | 'info' | 'error';
-  title: string;
-  message: string;
-  time: string;
-  read: boolean;
-}
-
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    type: 'info',
-    title: 'New Employee Joined',
-    message: 'Sneha Reddy has joined the Engineering department',
-    time: '2024-01-15T10:30:00',
-    read: false,
-  },
-  {
-    id: '2',
-    type: 'warning',
-    title: 'Leave Request Pending',
-    message: 'Rahul Kumar has requested leave from Jan 20-22',
-    time: '2024-01-15T09:15:00',
-    read: false,
-  },
-  {
-    id: '3',
-    type: 'success',
-    title: 'Payroll Processed',
-    message: 'January payroll has been processed successfully',
-    time: '2024-01-14T16:00:00',
-    read: true,
-  },
-  {
-    id: '4',
-    type: 'info',
-    title: 'Attendance Alert',
-    message: '5 employees have not checked in today',
-    time: '2024-01-14T09:30:00',
-    read: true,
-  },
-];
+import { Notification } from '@/types';
+import api from '@/services/api';
+import { API_ENDPOINTS } from '@/utils/constants';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Notifications() {
   const { user } = useAuth();
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
+  const { toast } = useToast();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const fetchNotifications = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.get(API_ENDPOINTS.NOTIFICATIONS);
+      setNotifications(response.data.data || []);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error?.message || 'Failed to fetch notifications',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const getIcon = (type: string) => {
-    switch (type) {
+    switch (type?.toLowerCase()) {
       case 'success':
         return <CheckCircle2 className="h-5 w-5 text-green-500" />;
       case 'warning':
@@ -72,14 +54,33 @@ export default function Notifications() {
     }
   };
 
-  const markAsRead = (id: string) => {
-    setNotifications(notifications.map(n => 
-      n.id === id ? { ...n, read: true } : n
-    ));
+  const markAsRead = async (id: string) => {
+    try {
+      await api.put(API_ENDPOINTS.MARK_READ(id));
+      setNotifications(notifications.map(n => 
+        n.id === id ? { ...n, read: true } : n
+      ));
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: 'Failed to mark notification as read',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
+  const markAllAsRead = async () => {
+    try {
+      const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
+      await Promise.all(unreadIds.map(id => api.put(API_ENDPOINTS.MARK_READ(id))));
+      setNotifications(notifications.map(n => ({ ...n, read: true })));
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: 'Failed to mark all notifications as read',
+        variant: 'destructive',
+      });
+    }
   };
 
   const deleteNotification = (id: string) => {
@@ -128,12 +129,21 @@ export default function Notifications() {
             </Card>
           </div>
 
-          {unreadNotifications.length > 0 && (
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>Unread Notifications</CardTitle>
-              </CardHeader>
-              <CardContent>
+          {isLoading ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">Loading notifications...</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {unreadNotifications.length > 0 && (
+                <Card className="mb-6">
+                  <CardHeader>
+                    <CardTitle>Unread Notifications</CardTitle>
+                  </CardHeader>
+                  <CardContent>
                 <div className="space-y-3">
                   {unreadNotifications.map((notification) => (
                     <div
@@ -149,7 +159,7 @@ export default function Notifications() {
                               {notification.message}
                             </p>
                             <p className="text-xs text-muted-foreground mt-2">
-                              {format(new Date(notification.time), 'MMM dd, yyyy • hh:mm a')}
+                              {format(new Date(notification.timestamp || notification.time), 'MMM dd, yyyy • hh:mm a')}
                             </p>
                           </div>
                           <div className="flex gap-2">
@@ -199,7 +209,7 @@ export default function Notifications() {
                               {notification.message}
                             </p>
                             <p className="text-xs text-muted-foreground mt-2">
-                              {format(new Date(notification.time), 'MMM dd, yyyy • hh:mm a')}
+                              {format(new Date(notification.timestamp || notification.time), 'MMM dd, yyyy • hh:mm a')}
                             </p>
                           </div>
                           <Button
@@ -219,16 +229,18 @@ export default function Notifications() {
             </Card>
           )}
 
-          {notifications.length === 0 && (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <Bell className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="font-semibold mb-2">No notifications</h3>
-                <p className="text-sm text-muted-foreground">
-                  You're all caught up! Check back later for new updates.
-                </p>
-              </CardContent>
-            </Card>
+              {notifications.length === 0 && (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <Bell className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="font-semibold mb-2">No notifications</h3>
+                    <p className="text-sm text-muted-foreground">
+                      You're all caught up! Check back later for new updates.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
         </PageContainer>
       </main>

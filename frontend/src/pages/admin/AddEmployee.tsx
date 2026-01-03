@@ -9,95 +9,86 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { User } from '@/types';
-import { mockUsers, departments, positions } from '@/data/mockUsers';
 import { useToast } from '@/hooks/use-toast';
+import { adminService } from '@/services/admin.service';
+import { Role } from '@/types';
 
-const USERS_KEY = 'dayflow_users';
+// Department and position options
+const departments = [
+  'Human Resources',
+  'Engineering',
+  'Marketing',
+  'Sales',
+  'Finance',
+  'Operations',
+];
+
+const positions = [
+  'Software Developer',
+  'Senior Developer',
+  'Marketing Specialist',
+  'Marketing Manager',
+  'Sales Representative',
+  'Sales Manager',
+  'HR Manager',
+  'HR Specialist',
+  'Finance Manager',
+  'Accountant',
+  'Operations Manager',
+  'Project Manager',
+];
 
 export default function AddEmployee() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    employeeId: '',
-    email: '',
-    password: '',
     firstName: '',
     lastName: '',
-    role: 'employee' as 'employee' | 'admin',
-    department: '',
-    position: '',
+    email: '',
     phone: '',
-    address: '',
+    role: Role.EMPLOYEE as Role,
+    company: '',
+    department: '',
+    location: '',
+    dateOfJoining: new Date().toISOString().split('T')[0],
+    monthlyWage: '',
+    jobPosition: '',
+    managerId: '',
   });
-
-  const getUsers = (): User[] => {
-    const stored = localStorage.getItem(USERS_KEY);
-    return stored ? JSON.parse(stored) : mockUsers;
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      const users = getUsers();
-
-      // Check if email already exists
-      if (users.some(u => u.email.toLowerCase() === formData.email.toLowerCase())) {
-        toast({
-          title: 'Error',
-          description: 'An account with this email already exists',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      // Check if employee ID already exists
-      if (users.some(u => (u.employeeId || '').toLowerCase() === formData.employeeId.toLowerCase())) {
-        toast({
-          title: 'Error',
-          description: 'This Employee ID is already registered',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      const newUser: User = {
-        id: String(users.length + 1),
-        employeeId: formData.employeeId,
-        email: formData.email,
-        password: formData.password,
+      await adminService.createEmployee({
         firstName: formData.firstName,
         lastName: formData.lastName,
-        role: formData.role,
-        department: formData.department,
-        position: formData.position,
+        email: formData.email,
         phone: formData.phone,
-        address: formData.address,
-        joinDate: new Date().toISOString().split('T')[0],
-        isVerified: true,
-      };
-
-      users.push(newUser);
-      localStorage.setItem(USERS_KEY, JSON.stringify(users));
+        role: formData.role,
+        company: formData.company,
+        department: formData.department,
+        location: formData.location,
+        dateOfJoining: formData.dateOfJoining,
+        monthlyWage: parseFloat(formData.monthlyWage),
+        jobPosition: formData.jobPosition || undefined,
+        managerId: formData.managerId || undefined,
+      });
 
       toast({
         title: 'Success',
-        description: 'Employee added successfully',
+        description: 'Employee created successfully. Login credentials have been sent to their email.',
       });
 
       navigate('/admin/employees');
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: 'Error',
-        description: 'Failed to add employee. Please try again.',
+        description: error.response?.data?.error?.message || 'Failed to create employee. Please try again.',
         variant: 'destructive',
       });
     } finally {
@@ -131,53 +122,6 @@ export default function AddEmployee() {
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="employeeId">Employee ID *</Label>
-                    <Input
-                      id="employeeId"
-                      value={formData.employeeId}
-                      onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
-                      required
-                      placeholder="EMP001"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email *</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      required
-                      placeholder="employee@example.com"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password *</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      required
-                      placeholder="••••••••"
-                      minLength={6}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone</Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="+91 98765 43210"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
                     <Label htmlFor="firstName">First Name *</Label>
                     <Input
                       id="firstName"
@@ -196,6 +140,41 @@ export default function AddEmployee() {
                       onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                       required
                       placeholder="Kumar"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      required
+                      placeholder="employee@example.com"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone *</Label>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      required
+                      placeholder="+91 98765 43210"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="company">Company *</Label>
+                    <Input
+                      id="company"
+                      value={formData.company}
+                      onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                      required
+                      placeholder="Company Name"
                     />
                   </div>
 
@@ -220,13 +199,12 @@ export default function AddEmployee() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="position">Position *</Label>
+                    <Label htmlFor="jobPosition">Job Position</Label>
                     <Select
-                      value={formData.position}
-                      onValueChange={(value) => setFormData({ ...formData, position: value })}
-                      required
+                      value={formData.jobPosition}
+                      onValueChange={(value) => setFormData({ ...formData, jobPosition: value })}
                     >
-                      <SelectTrigger id="position">
+                      <SelectTrigger id="jobPosition">
                         <SelectValue placeholder="Select position" />
                       </SelectTrigger>
                       <SelectContent>
@@ -238,35 +216,66 @@ export default function AddEmployee() {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="location">Location *</Label>
+                    <Input
+                      id="location"
+                      value={formData.location}
+                      onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                      required
+                      placeholder="City, State"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="dateOfJoining">Date of Joining *</Label>
+                    <Input
+                      id="dateOfJoining"
+                      type="date"
+                      value={formData.dateOfJoining}
+                      onChange={(e) => setFormData({ ...formData, dateOfJoining: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="monthlyWage">Monthly Wage (₹) *</Label>
+                    <Input
+                      id="monthlyWage"
+                      type="number"
+                      value={formData.monthlyWage}
+                      onChange={(e) => setFormData({ ...formData, monthlyWage: e.target.value })}
+                      required
+                      placeholder="50000"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Role *</Label>
+                    <RadioGroup
+                      value={formData.role}
+                      onValueChange={(value: Role) => setFormData({ ...formData, role: value })}
+                      className="flex gap-4"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value={Role.EMPLOYEE} id="employee" />
+                        <Label htmlFor="employee" className="font-normal cursor-pointer">Employee</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value={Role.ADMIN} id="admin" />
+                        <Label htmlFor="admin" className="font-normal cursor-pointer">Admin</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="address">Address</Label>
-                  <Textarea
-                    id="address"
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    placeholder="Street address, City, State, PIN Code"
-                    rows={3}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Role</Label>
-                  <RadioGroup
-                    value={formData.role}
-                    onValueChange={(value: 'employee' | 'admin') => setFormData({ ...formData, role: value })}
-                    className="flex gap-4"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="employee" id="employee" />
-                      <Label htmlFor="employee" className="font-normal cursor-pointer">Employee</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="admin" id="admin" />
-                      <Label htmlFor="admin" className="font-normal cursor-pointer">Admin</Label>
-                    </div>
-                  </RadioGroup>
+                <div className="p-4 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    <strong>Note:</strong> Login ID and password will be auto-generated and sent to the employee's email address.
+                  </p>
                 </div>
 
                 <div className="flex gap-4 pt-4">

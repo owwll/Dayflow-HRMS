@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PageContainer } from '@/components/layout/PageContainer';
@@ -15,43 +16,91 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRight,
-  ArrowUpRight
+  ArrowUpRight,
+  Loader2
 } from 'lucide-react';
+import { dashboardService } from '@/services/dashboard.service';
+import { leaveService } from '@/services/leave.service';
+import { adminService } from '@/services/admin.service';
+import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
+import { LeaveRequest, EmployeeCard } from '@/types';
+import { getImageUrlWithCacheBust } from '@/lib/utils';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
+  const [summary, setSummary] = useState({
+    totalEmployees: 0,
+    presentToday: 0,
+    onLeave: 0,
+    pendingApprovals: 0,
+  });
+  const [pendingLeaves, setPendingLeaves] = useState<LeaveRequest[]>([]);
+  const [recentEmployees, setRecentEmployees] = useState<EmployeeCard[]>([]);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    setIsLoading(true);
+    try {
+      // Fetch dashboard summary
+      const dashboardData = await dashboardService.getDashboardData();
+      if (dashboardData.summary) {
+        setSummary(dashboardData.summary);
+      }
+      if (dashboardData.employeeCards) {
+        setRecentEmployees(dashboardData.employeeCards.slice(0, 5));
+      }
+
+      // Fetch pending leave requests
+      const leaveData = await leaveService.getLeaveRequests('PENDING', 1, 5);
+      setPendingLeaves(leaveData.requests || []);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error?.message || 'Failed to fetch dashboard data',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const stats = [
     {
       title: 'Total Employees',
-      value: '48',
-      change: '+3',
-      trend: 'up',
+      value: summary.totalEmployees.toString(),
+      change: '',
+      trend: 'neutral' as const,
       icon: Users,
       color: 'bg-primary/10 text-primary',
     },
     {
       title: 'Present Today',
-      value: '42',
-      change: '87%',
-      trend: 'up',
+      value: summary.presentToday.toString(),
+      change: summary.totalEmployees > 0 ? `${Math.round((summary.presentToday / summary.totalEmployees) * 100)}%` : '0%',
+      trend: 'up' as const,
       icon: Clock,
       color: 'bg-success/10 text-success',
     },
     {
       title: 'Pending Leaves',
-      value: '5',
-      change: '+2',
-      trend: 'neutral',
+      value: summary.pendingApprovals.toString(),
+      change: '',
+      trend: 'neutral' as const,
       icon: CalendarDays,
       color: 'bg-warning/10 text-warning',
     },
     {
-      title: 'Payroll This Month',
-      value: '₹12,45,000',
-      change: '+8%',
-      trend: 'up',
-      icon: Wallet,
+      title: 'On Leave Today',
+      value: summary.onLeave.toString(),
+      change: '',
+      trend: 'neutral' as const,
+      icon: CalendarDays,
       color: 'bg-accent text-accent-foreground',
     },
   ];
@@ -61,18 +110,6 @@ export default function AdminDashboard() {
     { label: 'Approve Leaves', href: '/admin/leave', icon: CheckCircle2 },
     { label: 'View Reports', href: '/admin/reports', icon: TrendingUp },
     { label: 'Run Payroll', href: '/admin/payroll', icon: Wallet },
-  ];
-
-  const pendingLeaves = [
-    { id: 1, name: 'Rahul Kumar', type: 'Paid Leave', dates: 'Jan 5-7', days: 3 },
-    { id: 2, name: 'Ananya Patel', type: 'Sick Leave', dates: 'Jan 8', days: 1 },
-    { id: 3, name: 'Vikram Singh', type: 'Unpaid Leave', dates: 'Jan 10-12', days: 3 },
-  ];
-
-  const recentHires = [
-    { id: 1, name: 'Sneha Reddy', position: 'Software Engineer', date: 'Dec 28' },
-    { id: 2, name: 'Arjun Mehta', position: 'Marketing Manager', date: 'Dec 20' },
-    { id: 3, name: 'Kavya Nair', position: 'HR Specialist', date: 'Dec 15' },
   ];
 
   return (
@@ -145,33 +182,86 @@ export default function AdminDashboard() {
                 </Button>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {pendingLeaves.map((leave) => (
-                    <div key={leave.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                      <div>
-                        <p className="font-medium">{leave.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {leave.type} • {leave.dates} ({leave.days} day{leave.days > 1 ? 's' : ''})
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="h-8">
-                          Reject
-                        </Button>
-                        <Button size="sm" className="h-8">
-                          Approve
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : pendingLeaves.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <CalendarDays className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No pending leave requests</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {pendingLeaves.map((leave) => {
+                      const employeeName = leave.employeeName || leave.employee?.name || 'Unknown';
+                      const startDateObj = leave.startDate ? new Date(leave.startDate) : null;
+                      const endDateObj = leave.endDate ? new Date(leave.endDate) : null;
+                      const startLabel = startDateObj && !isNaN(startDateObj.getTime()) ? format(startDateObj, 'MMM dd') : 'N/A';
+                      const endLabel = endDateObj && !isNaN(endDateObj.getTime()) ? format(endDateObj, 'MMM dd, yyyy') : 'N/A';
+                      const dates = leave.startDate === leave.endDate ? startLabel : `${startLabel} - ${endLabel}`;
+                      const days = leave.duration || 0;
+                      return (
+                        <div key={leave.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                          <div>
+                            <p className="font-medium">{employeeName}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {leave.leaveType} • {dates} ({days} day{days > 1 ? 's' : ''})
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="h-8"
+                              onClick={async () => {
+                                try {
+                                  await leaveService.approveLeave(leave.id, 'reject');
+                                  toast({ title: 'Leave rejected', variant: 'default' });
+                                  fetchDashboardData();
+                                } catch (error: any) {
+                                  toast({
+                                    title: 'Error',
+                                    description: 'Failed to reject leave',
+                                    variant: 'destructive',
+                                  });
+                                }
+                              }}
+                            >
+                              Reject
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              className="h-8"
+                              onClick={async () => {
+                                try {
+                                  await leaveService.approveLeave(leave.id, 'approve');
+                                  toast({ title: 'Leave approved', variant: 'default' });
+                                  fetchDashboardData();
+                                } catch (error: any) {
+                                  toast({
+                                    title: 'Error',
+                                    description: 'Failed to approve leave',
+                                    variant: 'destructive',
+                                  });
+                                }
+                              }}
+                            >
+                              Approve
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
-            {/* Recent Hires */}
+            {/* Employee Cards */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-lg">Recent Hires</CardTitle>
+                <CardTitle className="text-lg">Employees</CardTitle>
                 <Button variant="ghost" size="sm" asChild>
                   <Link to="/admin/employees">
                     View all
@@ -180,22 +270,41 @@ export default function AdminDashboard() {
                 </Button>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {recentHires.map((hire) => (
-                    <div key={hire.id} className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
-                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="text-sm font-medium text-primary">
-                          {hire.name.split(' ').map(n => n[0]).join('')}
-                        </span>
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : recentEmployees.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No employees found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recentEmployees.map((emp) => (
+                      <div key={emp.id} className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                          {emp.profilePic ? (
+                            <img src={getImageUrlWithCacheBust(emp.profilePic) || emp.profilePic} alt={emp.name} className="h-full w-full object-cover" key={emp.profilePic} />
+                          ) : (
+                            <span className="text-sm font-medium text-primary">
+                              {emp.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium">{emp.name}</p>
+                          <p className="text-sm text-muted-foreground">{emp.role || emp.department || 'Employee'}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">
+                            {emp.attendance?.checkIn ? `In: ${format(new Date(emp.attendance.checkIn), 'h:mm a')}` : 'Not checked in'}
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <p className="font-medium">{hire.name}</p>
-                        <p className="text-sm text-muted-foreground">{hire.position}</p>
-                      </div>
-                      <p className="text-sm text-muted-foreground">{hire.date}</p>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

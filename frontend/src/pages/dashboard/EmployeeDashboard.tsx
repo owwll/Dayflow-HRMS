@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { TopNav } from '@/components/layout/TopNav';
 import { PageContainer } from '@/components/layout/PageContainer';
@@ -12,11 +13,38 @@ import {
   TrendingUp,
   CheckCircle2,
   AlertCircle,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from 'lucide-react';
+import { dashboardService } from '@/services/dashboard.service';
+import { attendanceService } from '@/services/attendance.service';
+import { leaveService } from '@/services/leave.service';
+import { useToast } from '@/hooks/use-toast';
+import { format, formatDistanceToNow } from 'date-fns';
 
 export default function EmployeeDashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState({
+    daysPresent: 0,
+    leaveBalance: { paid: 0, sick: 0, unpaid: 0 },
+    pendingRequests: 0,
+  });
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [attendanceStatus, setAttendanceStatus] = useState<{
+    isCheckedIn: boolean;
+    checkInTime: string | null;
+    checkOutTime: string | null;
+  }>({
+    isCheckedIn: false,
+    checkInTime: null,
+    checkOutTime: null,
+  });
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [user]);
 
   const quickActions = [
     {
@@ -49,46 +77,96 @@ export default function EmployeeDashboard() {
     },
   ];
 
-  const recentActivity = [
-    {
-      id: 1,
-      type: 'attendance',
-      message: 'Checked in at 9:00 AM',
-      time: 'Today',
-      icon: CheckCircle2,
-      iconColor: 'text-success',
-    },
-    {
-      id: 2,
-      type: 'leave',
-      message: 'Leave request approved for Dec 25-26',
-      time: 'Yesterday',
-      icon: CheckCircle2,
-      iconColor: 'text-success',
-    },
-    {
-      id: 3,
-      type: 'payroll',
-      message: 'December salary credited',
-      time: '2 days ago',
-      icon: Wallet,
-      iconColor: 'text-primary',
-    },
-    {
-      id: 4,
-      type: 'leave',
-      message: 'Leave request pending approval',
-      time: '3 days ago',
-      icon: AlertCircle,
-      iconColor: 'text-warning',
-    },
-  ];
-
-  const stats = [
-    { label: 'Days Present', value: '22', subtext: 'This month' },
-    { label: 'Leave Balance', value: '12', subtext: 'Days remaining' },
-    { label: 'Pending Requests', value: '1', subtext: 'Awaiting approval' },
-  ];
+  const fetchDashboardData = async () => {
+    if (!user?.id) return;
+    
+    setIsLoading(true);
+    try {
+      // Fetch dashboard data
+      const dashboardData = await dashboardService.getDashboardData();
+      
+      // Update stats from dashboard data
+      if (dashboardData.quickStats) {
+        const totalLeaveBalance = dashboardData.quickStats.leaveBalance.paid + 
+                                  dashboardData.quickStats.leaveBalance.sick;
+        setStats({
+          daysPresent: 0, // Will be calculated from attendance
+          leaveBalance: dashboardData.quickStats.leaveBalance,
+          pendingRequests: 0, // Will be calculated from leave requests
+        });
+        
+        // Set attendance status
+        setAttendanceStatus({
+          isCheckedIn: dashboardData.quickStats.attendanceToday === 'present' && !!dashboardData.quickStats.checkInTime,
+          checkInTime: dashboardData.quickStats.checkInTime,
+          checkOutTime: dashboardData.quickStats.checkOutTime,
+        });
+      }
+      
+      // Fetch attendance to get days present
+      try {
+        const currentDate = new Date();
+        const month = format(currentDate, 'yyyy-MM');
+        const attendanceData = await attendanceService.getAttendanceRecords(month, 1, 100);
+        if (attendanceData.records) {
+          const thisMonthRecords = attendanceData.records.filter(r => r.status === 'PRESENT' || r.status === 'present');
+          setStats(prev => ({ ...prev, daysPresent: thisMonthRecords.length }));
+        }
+      } catch (error) {
+        console.error('Error fetching attendance:', error);
+      }
+      
+      // Fetch leave requests to get pending count
+      try {
+        const leaveData = await leaveService.getLeaveRequests('PENDING', 1, 100);
+        if (leaveData.requests) {
+          setStats(prev => ({ ...prev, pendingRequests: leaveData.requests.length }));
+        }
+      } catch (error) {
+        console.error('Error fetching leave requests:', error);
+      }
+      
+      // Set recent activity from dashboard data
+      if (dashboardData.recentActivity) {
+        const activities = dashboardData.recentActivity.map((activity: any) => {
+          let icon = CheckCircle2;
+          let iconColor = 'text-success';
+          
+          if (activity.type?.includes('leave')) {
+            icon = CalendarDays;
+            if (activity.message?.toLowerCase().includes('pending')) {
+              iconColor = 'text-warning';
+              icon = AlertCircle;
+            }
+          } else if (activity.type?.includes('payroll')) {
+            icon = Wallet;
+            iconColor = 'text-primary';
+          } else if (activity.type?.includes('attendance')) {
+            icon = Clock;
+            iconColor = 'text-success';
+          }
+          
+          return {
+            id: activity.id,
+            type: activity.type,
+            message: activity.message,
+            time: activity.timestamp ? formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true }) : 'Recently',
+            icon,
+            iconColor,
+          };
+        });
+        setRecentActivity(activities);
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error?.message || 'Failed to fetch dashboard data',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -107,22 +185,50 @@ export default function EmployeeDashboard() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          {stats.map((stat, index) => (
-            <Card key={index}>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">{stat.label}</p>
-                    <p className="text-3xl font-semibold mt-1">{stat.value}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{stat.subtext}</p>
-                  </div>
-                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                    <TrendingUp className="h-6 w-6 text-primary" />
-                  </div>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Days Present</p>
+                  <p className="text-3xl font-semibold mt-1">{isLoading ? '...' : stats.daysPresent}</p>
+                  <p className="text-xs text-muted-foreground mt-1">This month</p>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <TrendingUp className="h-6 w-6 text-primary" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Leave Balance</p>
+                  <p className="text-3xl font-semibold mt-1">
+                    {isLoading ? '...' : (stats.leaveBalance.paid + stats.leaveBalance.sick)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">Days remaining</p>
+                </div>
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <CalendarDays className="h-6 w-6 text-primary" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Pending Requests</p>
+                  <p className="text-3xl font-semibold mt-1">{isLoading ? '...' : stats.pendingRequests}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Awaiting approval</p>
+                </div>
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <AlertCircle className="h-6 w-6 text-primary" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -158,22 +264,35 @@ export default function EmployeeDashboard() {
             <h2 className="text-lg font-medium mb-4">Recent Activity</h2>
             <Card>
               <CardContent className="pt-6">
-                <div className="space-y-4">
-                  {recentActivity.map((activity) => (
-                    <div key={activity.id} className="flex items-start gap-3">
-                      <activity.icon className={`h-5 w-5 mt-0.5 ${activity.iconColor}`} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm">{activity.message}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {activity.time}
-                        </p>
-                      </div>
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : recentActivity.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No recent activity</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-4">
+                      {recentActivity.map((activity) => (
+                        <div key={activity.id} className="flex items-start gap-3">
+                          <activity.icon className={`h-5 w-5 mt-0.5 ${activity.iconColor}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm">{activity.message}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {activity.time}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                <Button variant="ghost" className="w-full mt-4" asChild>
-                  <Link to="/notifications">View all activity</Link>
-                </Button>
+                    <Button variant="ghost" className="w-full mt-4" asChild>
+                      <Link to="/notifications">View all activity</Link>
+                    </Button>
+                  </>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -184,22 +303,37 @@ export default function EmployeeDashboard() {
           <CardContent className="py-6">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="p-3 rounded-full bg-success/10">
-                  <Clock className="h-6 w-6 text-success" />
+                <div className={`p-3 rounded-full ${attendanceStatus.isCheckedIn ? 'bg-success/10' : 'bg-muted'}`}>
+                  <Clock className={`h-6 w-6 ${attendanceStatus.isCheckedIn ? 'text-success' : 'text-muted-foreground'}`} />
                 </div>
                 <div>
-                  <h3 className="font-medium">Ready to start your day?</h3>
+                  <h3 className="font-medium">
+                    {attendanceStatus.isCheckedIn ? 'Checked In' : 'Ready to start your day?'}
+                  </h3>
                   <p className="text-sm text-muted-foreground">
-                    You haven't checked in yet today.
+                    {attendanceStatus.isCheckedIn 
+                      ? attendanceStatus.checkInTime 
+                        ? `Checked in at ${format(new Date(attendanceStatus.checkInTime), 'h:mm a')}${attendanceStatus.checkOutTime ? `, out at ${format(new Date(attendanceStatus.checkOutTime), 'h:mm a')}` : ''}`
+                        : 'You are checked in'
+                      : "You haven't checked in yet today."}
                   </p>
                 </div>
               </div>
-              <Button asChild>
-                <Link to="/attendance">
-                  Check In Now
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
+              {!attendanceStatus.isCheckedIn ? (
+                <Button asChild>
+                  <Link to="/attendance">
+                    Check In Now
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              ) : (
+                <Button variant="outline" asChild>
+                  <Link to="/attendance">
+                    View Attendance
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

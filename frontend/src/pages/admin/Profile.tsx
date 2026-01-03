@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { TopNav } from '@/components/layout/TopNav';
+import { Sidebar } from '@/components/layout/Sidebar';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,17 +14,16 @@ import { profileService } from '@/services/profile.service';
 import { ProfileData } from '@/types';
 import { getImageUrlWithCacheBust } from '@/lib/utils';
 
-export default function Profile() {
+export default function AdminProfile() {
   const { user, updateUser } = useAuth();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
     phone: '',
     address: '',
   });
@@ -43,8 +42,6 @@ export default function Profile() {
       const data = await profileService.getProfile(user.id);
       setProfileData(data);
       setFormData({
-        firstName: data.personal.firstName || '',
-        lastName: data.personal.lastName || '',
         phone: data.personal.phone || '',
         address: data.personal.address || '',
       });
@@ -61,19 +58,12 @@ export default function Profile() {
 
   const handleSave = async () => {
     if (!user?.id) return;
-    
+
+    setIsSaving(true);
     try {
       await profileService.updateProfile(user.id, {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
         phone: formData.phone,
         address: formData.address,
-      });
-      
-      // Update AuthContext with new name
-      updateUser({
-        firstName: formData.firstName,
-        lastName: formData.lastName,
       });
       
       await fetchProfile(); // Refresh profile data
@@ -84,18 +74,18 @@ export default function Profile() {
       });
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.response?.data?.error?.message || 'Failed to update profile',
+        title: 'Update failed',
+        description: error.response?.data?.error?.message || 'Failed to update profile. Please try again.',
         variant: 'destructive',
       });
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleCancel = () => {
     if (profileData) {
       setFormData({
-        firstName: profileData.personal.firstName || '',
-        lastName: profileData.personal.lastName || '',
         phone: profileData.personal.phone || '',
         address: profileData.personal.address || '',
       });
@@ -110,7 +100,7 @@ export default function Profile() {
     if (user) {
       return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
     }
-    return 'U';
+    return 'A';
   };
 
   const displayData = profileData || {
@@ -124,7 +114,7 @@ export default function Profile() {
     },
     professional: {
       department: user?.department || '',
-      jobPosition: user?.position || '',
+      jobPosition: user?.position || 'Admin',
       employeeCode: user?.employeeId || '',
     },
   };
@@ -158,9 +148,9 @@ export default function Profile() {
       const profilePicUrl = await profileService.uploadProfilePic(user.id, file);
       updateUser({ profilePic: profilePicUrl });
       
-      // Refresh profile data to update the displayed photo
+      // Refresh profile data
       await fetchProfile();
-      
+
       toast({
         title: 'Profile photo updated',
         description: 'Your profile photo has been updated successfully',
@@ -184,98 +174,108 @@ export default function Profile() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <TopNav />
-
-      <PageContainer>
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-              <div>
-                <h1 className="text-2xl font-semibold text-foreground">My Profile</h1>
-                <p className="text-muted-foreground mt-1">
-                  View and manage your personal information
-                </p>
-              </div>
-          {!isEditing ? (
-            <Button onClick={() => setIsEditing(true)}>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit Profile
-            </Button>
-          ) : (
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={handleCancel}>
-                Cancel
-              </Button>
-              <Button onClick={handleSave}>
-                <Save className="mr-2 h-4 w-4" />
-                Save Changes
-              </Button>
+    <div className="min-h-screen flex bg-background">
+      <Sidebar />
+      
+      <main className="flex-1 overflow-auto">
+        <PageContainer>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Profile Card */}
-          <Card className="lg:col-span-1">
-            <CardContent className="pt-6">
-              <div className="flex flex-col items-center text-center">
-                <div className="relative mb-4">
-                  <Avatar className="h-24 w-24">
-                    <AvatarImage src={getImageUrlWithCacheBust(displayData.personal.profilePic)} alt={displayData.personal.firstName} key={displayData.personal.profilePic} />
-                    <AvatarFallback className="text-2xl">{getInitials()}</AvatarFallback>
-                  </Avatar>
-                  <Button
-                    size="icon"
-                    className="absolute bottom-0 right-0 h-8 w-8 rounded-full"
-                    onClick={handlePhotoClick}
-                    disabled={isUploadingPhoto}
-                  >
-                    {isUploadingPhoto ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Camera className="h-4 w-4" />
-                    )}
+          ) : (
+            <>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                <div>
+                  <h1 className="text-2xl font-semibold text-foreground">My Profile</h1>
+                  <p className="text-muted-foreground mt-1">
+                    View and manage your personal information
+                  </p>
+                </div>
+                {!isEditing ? (
+                  <Button onClick={() => setIsEditing(true)}>
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit Profile
                   </Button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoUpload}
-                    className="hidden"
-                  />
-                </div>
-                <h2 className="text-xl font-semibold">
-                  {displayData.personal.firstName} {displayData.personal.lastName}
-                </h2>
-                <p className="text-sm text-muted-foreground mt-1">{displayData.professional.jobPosition || 'Employee'}</p>
-                <p className="text-sm text-muted-foreground">{displayData.professional.department || 'Department'}</p>
-                <Separator className="my-4" />
-                <div className="w-full space-y-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">{displayData.personal.email}</span>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={handleCancel} disabled={isSaving}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSave} disabled={isSaving}>
+                      {isSaving ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="mr-2 h-4 w-4" />
+                          Save Changes
+                        </>
+                      )}
+                    </Button>
                   </div>
-                  {displayData.personal.phone && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">{displayData.personal.phone}</span>
-                    </div>
-                  )}
-                  {displayData.professional.employeeCode && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-muted-foreground font-mono">{displayData.professional.employeeCode}</span>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
-            </CardContent>
-          </Card>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Profile Card */}
+                <Card className="lg:col-span-1">
+                  <CardContent className="pt-6">
+                    <div className="flex flex-col items-center text-center">
+                      <div className="relative mb-4">
+                        <Avatar className="h-24 w-24">
+                          <AvatarImage src={getImageUrlWithCacheBust(displayData.personal.profilePic)} alt={displayData.personal.firstName} key={displayData.personal.profilePic} />
+                          <AvatarFallback className="text-2xl">{getInitials()}</AvatarFallback>
+                        </Avatar>
+                        <Button
+                          size="icon"
+                          className="absolute bottom-0 right-0 h-8 w-8 rounded-full"
+                          onClick={handlePhotoClick}
+                          disabled={isUploadingPhoto}
+                        >
+                          {isUploadingPhoto ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Camera className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handlePhotoUpload}
+                          className="hidden"
+                        />
+                      </div>
+                      <h2 className="text-xl font-semibold">
+                        {displayData.personal.firstName} {displayData.personal.lastName}
+                      </h2>
+                      <p className="text-sm text-muted-foreground mt-1">Admin</p>
+                      <p className="text-sm text-muted-foreground">{displayData.professional.department || 'Department'}</p>
+                      <Separator className="my-4" />
+                      <div className="w-full space-y-3">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Mail className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-muted-foreground">{displayData.personal.email}</span>
+                        </div>
+                        {displayData.personal.phone && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <Phone className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-muted-foreground">{displayData.personal.phone}</span>
+                          </div>
+                        )}
+                        {displayData.professional.employeeCode && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <User className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-muted-foreground font-mono">{displayData.professional.employeeCode}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
           {/* Details Card */}
           <Card className="lg:col-span-2">
@@ -287,37 +287,19 @@ export default function Profile() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="firstName">First Name</Label>
-                  {isEditing ? (
-                    <Input
-                      id="firstName"
-                      type="text"
-                      value={formData.firstName}
-                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                      placeholder="First Name"
-                    />
-                  ) : (
-                    <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/50">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <span>{displayData.personal.firstName || 'N/A'}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/50">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span>{displayData.personal.firstName || 'N/A'}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Contact HR to change name</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="lastName">Last Name</Label>
-                  {isEditing ? (
-                    <Input
-                      id="lastName"
-                      type="text"
-                      value={formData.lastName}
-                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                      placeholder="Last Name"
-                    />
-                  ) : (
-                    <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/50">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <span>{displayData.personal.lastName || 'N/A'}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/50">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span>{displayData.personal.lastName || 'N/A'}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Contact HR to change name</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
@@ -336,6 +318,7 @@ export default function Profile() {
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                       placeholder="+91 98765 43210"
+                      disabled={isSaving}
                     />
                   ) : (
                     <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/50">
@@ -356,6 +339,7 @@ export default function Profile() {
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                     placeholder="Street address, City, State, PIN Code"
+                    disabled={isSaving}
                   />
                 ) : (
                   <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/50">
@@ -380,7 +364,7 @@ export default function Profile() {
                   <Label>Position</Label>
                   <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/50">
                     <Briefcase className="h-4 w-4 text-muted-foreground" />
-                    <span>{displayData.professional.jobPosition || 'Not assigned'}</span>
+                    <span>{displayData.professional.jobPosition || 'Admin'}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">Contact HR to change position</p>
                 </div>
@@ -402,9 +386,10 @@ export default function Profile() {
             </CardContent>
           </Card>
         </div>
-          </>
-        )}
-      </PageContainer>
+            </>
+          )}
+        </PageContainer>
+      </main>
     </div>
   );
 }

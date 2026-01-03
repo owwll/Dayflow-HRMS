@@ -101,7 +101,7 @@ export class ProfileService {
         }
 
         // Define allowed fields based on role
-        const employeeAllowedFields = ['phone', 'address', 'profilePicUrl'];
+        const employeeAllowedFields = ['firstName', 'lastName', 'phone', 'address', 'profilePicUrl'];
         const adminAllowedFields = [
             'firstName', 'lastName', 'email', 'phone', 'address',
             'department', 'jobPosition', 'monthlyWage', 'dateOfBirth',
@@ -116,19 +116,26 @@ export class ProfileService {
         const employeeData: any = {};
 
         for (const [key, value] of Object.entries(data)) {
-            // Skip empty strings and null values (but allow 0 and false)
-            if (value === '' || value === null || value === undefined) {
+            // Skip undefined values (but allow null, empty strings, 0, and false)
+            if (value === undefined) {
                 continue;
             }
 
             if (allowedFields.includes(key)) {
+                // Convert empty strings to null for optional fields
+                const processedValue = value === '' ? null : value;
+
                 if (['firstName', 'lastName', 'email', 'profilePicUrl'].includes(key)) {
-                    filteredData[key] = value;
-                } else if (key === 'dateOfBirth' && value) {
+                    // Don't allow null for required fields
+                    if (processedValue !== null || key === 'profilePicUrl') {
+                        filteredData[key] = processedValue;
+                    }
+                } else if (key === 'dateOfBirth' && processedValue) {
                     // Convert date string to DateTime
-                    employeeData[key] = new Date(value as string);
+                    employeeData[key] = new Date(processedValue as string);
                 } else {
-                    employeeData[key] = value;
+                    // Allow null for optional employee fields (phone, address, etc.)
+                    employeeData[key] = processedValue;
                 }
             }
         }
@@ -142,7 +149,10 @@ export class ProfileService {
                 });
             }
 
-            if (Object.keys(employeeData).length > 0 && user.employee) {
+            if (Object.keys(employeeData).length > 0) {
+                if (!user.employee) {
+                    throw new NotFoundError('Employee record not found. Please contact administrator.');
+                }
                 await tx.employee.update({
                     where: { id: user.employee.id },
                     data: employeeData,

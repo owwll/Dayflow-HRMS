@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -14,12 +14,20 @@ import {
 export default function VerifyOTP() {
     const location = useLocation();
     const navigate = useNavigate();
-    const { verifyOTP } = useAuth();
+    const { verifyOTP, user, isAuthenticated } = useAuth();
 
     const email = location.state?.email || '';
     const [otp, setOtp] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+
+    // Redirect to dashboard after successful authentication
+    useEffect(() => {
+        if (isAuthenticated && user) {
+            const dashboardPath = user.role === 'admin' || user.role === 'ADMIN' ? '/admin' : '/dashboard';
+            navigate(dashboardPath, { replace: true });
+        }
+    }, [isAuthenticated, user, navigate]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -33,19 +41,17 @@ export default function VerifyOTP() {
         const result = await verifyOTP(otp);
         setIsLoading(false);
 
-        if (result.success) {
-            // Successful verification will update the auth state and AppRedirect will kick in
-            // However, we can also manually navigate if needed
-        } else {
+        if (!result.success) {
             setError(result.error || 'Verification failed');
         }
+        // Redirect will be handled by useEffect when user state updates
     };
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-background p-4">
             <div className="w-full max-w-md">
                 <div className="flex justify-center mb-8">
-                    <Link to="/" className="flex items-center gap-2">
+                    <Link to="/signin" className="flex items-center gap-2">
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
                             <span className="text-xl font-bold text-primary-foreground">D</span>
                         </div>

@@ -146,9 +146,29 @@ export class PayrollService {
             },
         });
 
-        const totalDays = 22; // Simplified
+        // Calculate actual working days in the month (excluding weekends)
+        const totalDays = this.calculateWorkingDays(start, end);
         const presentDays = attendances.filter(a => a.status === 'PRESENT').length;
-        const leaves = attendances.filter(a => a.status === 'ON_LEAVE').length;
+        
+        // Get approved leaves for the month
+        const approvedLeaves = await prisma.leaveRequest.findMany({
+            where: {
+                employeeId: employee.id,
+                status: 'APPROVED',
+                startDate: { lte: end },
+                endDate: { gte: start },
+            },
+        });
+        
+        // Calculate total leave days in the month
+        let leaves = 0;
+        approvedLeaves.forEach(leave => {
+            const leaveStart = leave.startDate > start ? leave.startDate : start;
+            const leaveEnd = leave.endDate < end ? leave.endDate : end;
+            const leaveDays = Math.ceil((leaveEnd.getTime() - leaveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            leaves += leaveDays;
+        });
+        
         const payableDays = presentDays + leaves;
 
         const monthlyWage = employee.monthlyWage;
@@ -212,5 +232,24 @@ export class PayrollService {
             },
             pdfUrl: null, // Would generate PDF here
         };
+    }
+
+    /**
+     * Calculate working days in a month (excluding weekends)
+     */
+    private calculateWorkingDays(start: Date, end: Date): number {
+        let workingDays = 0;
+        const current = new Date(start);
+        
+        while (current <= end) {
+            const dayOfWeek = current.getDay();
+            // Count Monday (1) through Friday (5) as working days
+            if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+                workingDays++;
+            }
+            current.setDate(current.getDate() + 1);
+        }
+        
+        return workingDays;
     }
 }

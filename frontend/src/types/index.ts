@@ -16,9 +16,9 @@ export const AttendanceStatus = {
 export type AttendanceStatus = typeof AttendanceStatus[keyof typeof AttendanceStatus];
 
 export const LeaveType = {
-    PAID: 'PAID',
-    SICK: 'SICK',
-    UNPAID: 'UNPAID',
+    PAID: 'paid',
+    SICK: 'sick',
+    UNPAID: 'unpaid',
 } as const;
 export type LeaveType = typeof LeaveType[keyof typeof LeaveType];
 
@@ -52,7 +52,6 @@ export interface User {
     address?: string;
     joinDate?: string;
     isVerified?: boolean;
-    password?: string; // Only for local mock usage
 }
 
 export interface Employee extends User {
@@ -163,6 +162,7 @@ export interface Notification {
 
 // Attendance Types
 export interface AttendanceRecord {
+    id?: string; // Attendance record ID (for check-out)
     date: string;
     day: string;
     checkIn: string | null;

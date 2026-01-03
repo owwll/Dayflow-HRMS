@@ -81,8 +81,8 @@ export class DashboardService {
         return {
             quickStats: {
                 attendanceToday: todayAttendance?.status || 'absent',
-                checkInTime: todayAttendance?.checkIn ? todayAttendance.checkIn.toISOString().substring(11, 16) : null,
-                checkOutTime: todayAttendance?.checkOut ? todayAttendance.checkOut.toISOString().substring(11, 16) : null,
+                checkInTime: todayAttendance?.checkIn ? todayAttendance.checkIn.toISOString() : null,
+                checkOutTime: todayAttendance?.checkOut ? todayAttendance.checkOut.toISOString() : null,
                 leaveBalance: {
                     paid: Math.max(0, 15 - paidLeaves),
                     sick: Math.max(0, 7 - sickLeaves),
@@ -173,8 +173,8 @@ export class DashboardService {
                     department: emp.department,
                     status: attendance?.status || 'absent',
                     attendance: {
-                        checkIn: attendance?.checkIn ? attendance.checkIn.toISOString().substring(11, 16) : null,
-                        checkOut: attendance?.checkOut ? attendance.checkOut.toISOString().substring(11, 16) : null,
+                        checkIn: attendance?.checkIn ? attendance.checkIn.toISOString() : null,
+                        checkOut: attendance?.checkOut ? attendance.checkOut.toISOString() : null,
                     },
                 };
             })

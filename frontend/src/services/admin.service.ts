@@ -47,8 +47,34 @@ export const adminService = {
             };
         }
         
+        // Map employee data to include all necessary fields
+        // Backend returns: { id, employeeCode, name, email, profilePic, department, jobPosition, ... }
+        const employees = Array.isArray(backendData.employees) ? backendData.employees.map((emp: any) => {
+            // Split name into firstName and lastName
+            const nameParts = (emp.name || '').split(' ');
+            const firstName = nameParts[0] || '';
+            const lastName = nameParts.slice(1).join(' ') || '';
+            
+            return {
+                id: emp.id || emp.userId,
+                employeeId: emp.employeeCode || emp.employeeId,
+                employeeCode: emp.employeeCode,
+                email: emp.email || '',
+                firstName: emp.firstName || firstName,
+                lastName: emp.lastName || lastName,
+                profilePic: emp.profilePic || emp.profilePicUrl || null,
+                department: emp.department || '',
+                position: emp.jobPosition || emp.position || '',
+                phone: emp.phone || '',
+                role: emp.role || 'EMPLOYEE',
+                isVerified: emp.isVerified !== undefined ? emp.isVerified : true,
+                location: emp.location || '',
+                status: emp.status || 'ACTIVE',
+            };
+        }) : [];
+        
         return {
-            items: Array.isArray(backendData.employees) ? backendData.employees : [],
+            items: employees,
             total: backendData.pagination?.total || 0,
             page: backendData.pagination?.page || page,
             limit: backendData.pagination?.limit || limit,

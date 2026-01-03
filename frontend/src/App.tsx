@@ -4,13 +4,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ThemeProvider } from "next-themes";
 
 // Pages
-import Landing from "./pages/Landing";
 import SignIn from "./pages/auth/SignIn";
-import SignUp from "./pages/auth/SignUp";
 import VerifyOTP from "./pages/auth/VerifyOTP";
-import EmailVerification from "./pages/auth/EmailVerification";
 import EmployeeDashboard from "./pages/dashboard/EmployeeDashboard";
 import AdminDashboard from "./pages/dashboard/AdminDashboard";
 import NotFound from "./pages/NotFound";
@@ -28,8 +26,8 @@ import Attendance from "./pages/admin/Attendance";
 import LeaveManagement from "./pages/admin/LeaveManagement";
 import Payroll from "./pages/admin/Payroll";
 import Reports from "./pages/admin/Reports";
-import Notifications from "./pages/admin/Notifications";
 import Settings from "./pages/admin/Settings";
+import AdminProfile from "./pages/admin/Profile";
 
 // Components
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -50,11 +48,26 @@ function AuthRedirect({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Redirect root path based on authentication
+function RootRedirect() {
+  const { isAuthenticated, user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return null;
+  }
+
+  if (isAuthenticated && user) {
+    return <Navigate to={user.role === Role.ADMIN ? '/admin' : '/dashboard'} replace />;
+  }
+
+  return <Navigate to="/signin" replace />;
+}
+
 function AppRoutes() {
   return (
     <Routes>
-      {/* Public Routes */}
-      <Route path="/" element={<Landing />} />
+      {/* Root redirect */}
+      <Route path="/" element={<RootRedirect />} />
 
       {/* Auth Routes - redirect to dashboard if already logged in */}
       <Route path="/signin" element={
@@ -62,13 +75,7 @@ function AppRoutes() {
           <SignIn />
         </AuthRedirect>
       } />
-      <Route path="/signup" element={
-        <AuthRedirect>
-          <SignUp />
-        </AuthRedirect>
-      } />
       <Route path="/verify-otp" element={<VerifyOTP />} />
-      <Route path="/verify-email" element={<EmailVerification />} />
 
       {/* Employee Routes */}
       <Route path="/dashboard" element={
@@ -133,14 +140,14 @@ function AppRoutes() {
           <Reports />
         </ProtectedRoute>
       } />
-      <Route path="/admin/notifications" element={
-        <ProtectedRoute allowedRoles={[Role.ADMIN]}>
-          <Notifications />
-        </ProtectedRoute>
-      } />
       <Route path="/admin/settings" element={
         <ProtectedRoute allowedRoles={[Role.ADMIN]}>
           <Settings />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/profile" element={
+        <ProtectedRoute allowedRoles={[Role.ADMIN]}>
+          <AdminProfile />
         </ProtectedRoute>
       } />
 
@@ -152,15 +159,17 @@ function AppRoutes() {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
+    <ThemeProvider attribute="class" enableSystem defaultTheme="system">
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 

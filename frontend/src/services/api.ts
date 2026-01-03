@@ -1,6 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-import { API_BASE_URL, STORAGE_KEYS } from '../utils/constants';
+import { API_BASE_URL, STORAGE_KEYS, ROUTES } from '../utils/constants';
 import type { ApiResponse } from '../types';
 
 // Create axios instance
@@ -89,7 +89,7 @@ api.interceptors.response.use(
                 localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
                 localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
                 localStorage.removeItem(STORAGE_KEYS.USER_DATA);
-                window.location.href = '/login';
+                window.location.href = ROUTES.LOGIN;
                 return Promise.reject(refreshError);
             }
         }

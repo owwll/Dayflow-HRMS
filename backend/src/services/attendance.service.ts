@@ -44,6 +44,7 @@ export class AttendanceService {
             },
         });
 
+        // Return the actual stored time (already in UTC from database)
         return {
             checkInTime: attendance.checkIn!.toISOString(),
             attendanceId: attendance.id,
@@ -178,10 +179,11 @@ export class AttendanceService {
                 halfDays: 0,
             },
             records: records.map(r => ({
+                id: r.id,
                 date: formatDate(r.date),
                 day: r.date.toLocaleDateString('en-US', { weekday: 'long' }),
-                checkIn: r.checkIn ? r.checkIn.toISOString().substring(11, 16) : null,
-                checkOut: r.checkOut ? r.checkOut.toISOString().substring(11, 16) : null,
+                checkIn: r.checkIn ? r.checkIn.toISOString() : null,
+                checkOut: r.checkOut ? r.checkOut.toISOString() : null,
                 workHours: r.workHours,
                 extraHours: r.extraHours,
                 breakTime: r.breakTime,
@@ -253,8 +255,8 @@ export class AttendanceService {
                     profilePic: r.employee.user.profilePicUrl,
                     department: r.employee.department,
                 },
-                checkIn: r.checkIn ? r.checkIn.toISOString().substring(11, 16) : null,
-                checkOut: r.checkOut ? r.checkOut.toISOString().substring(11, 16) : null,
+                checkIn: r.checkIn ? r.checkIn.toISOString() : null,
+                checkOut: r.checkOut ? r.checkOut.toISOString() : null,
                 workHours: r.workHours,
                 extraHours: r.extraHours,
                 status: r.status,

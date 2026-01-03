@@ -44,10 +44,16 @@ export class LeaveService {
             attachmentUrl = result.secure_url;
         }
 
+        // Normalize and validate leave type (frontend may send lowercase strings)
+        const normalizedLeaveType = typeof data.leaveType === 'string' ? data.leaveType.toUpperCase() : data.leaveType;
+        if (!Object.values(LeaveType).includes(normalizedLeaveType as LeaveType)) {
+            throw new ValidationError('Invalid leave type');
+        }
+
         const leaveRequest = await prisma.leaveRequest.create({
             data: {
                 employeeId: user.employee.id,
-                leaveType: data.leaveType,
+                leaveType: normalizedLeaveType as LeaveType,
                 startDate,
                 endDate,
                 duration,
@@ -148,7 +154,7 @@ export class LeaveService {
         const sickLeaves = approvedLeaves.filter(l => l.leaveType === LeaveType.SICK).reduce((sum, l) => sum + l.duration, 0);
 
         return {
-            balance: {
+            balances: {
                 paid: Math.max(0, 15 - paidLeaves),
                 sick: Math.max(0, 7 - sickLeaves),
                 unpaid: 0,
