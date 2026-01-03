@@ -1,0 +1,265 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  ON_LEAVE
+}
+
+enum LeaveType {
+  PAID
+  SICK
+  UNPAID
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  TERMINATED
+}
+
+enum NotificationType {
+  LEAVE_APPROVED
+  LEAVE_REJECTED
+  LEAVE_APPLIED
+  ATTENDANCE_REGULARIZATION
+  PAYROLL
+  SYSTEM
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  loginId       String    @unique
+  passwordHash  String
+  role          Role      @default(EMPLOYEE)
+  firstName     String
+  lastName      String
+  profilePicUrl String?
+  isVerified    Boolean   @default(false)
+  isFirstLogin  Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  employee      Employee?
+  otps          OTP[]
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+
+  @@index([email])
+  @@index([loginId])
+}
+
+model Employee {
+  id              String         @id @default(cuid())
+  userId          String         @unique
+  employeeCode    String         @unique
+  company         String
+  department      String
+  jobPosition     String?
+  managerId       String?
+  location        String
+  dateOfJoining   DateTime
+  dateOfBirth     DateTime?
+  gender          String?
+  maritalStatus   String?
+  nationality     String?
+  address         String?
+  phone           String?
+  status          EmployeeStatus @default(ACTIVE)
+  
+  // Bank Details
+  accountNumber   String?
+  bankName        String?
+  ifscCode        String?
+  panNumber       String?
+  uanNumber       String?
+
+  // Work Schedule
+  workingDays     Int            @default(5)
+  dailyHours      Int            @default(8)
+  breakTime       String         @default("01:00")
+
+  // Salary
+  monthlyWage     Float
+
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  manager         Employee?      @relation("EmployeeManager", fields: [managerId], references: [id])
+  subordinates    Employee[]     @relation("EmployeeManager")
+  
+  attendances     Attendance[]
+  leaveRequests   LeaveRequest[]
+  salaryComponents SalaryComponent[]
+
+  @@index([userId])
+  @@index([employeeCode])
+  @@index([department])
+  @@index([managerId])
+}
+
+model Attendance {
+  id          String           @id @default(cuid())
+  employeeId  String
+  date        DateTime         @default(now())
+  checkIn     DateTime?
+  checkOut    DateTime?
+  workHours   Float?
+  extraHours  Float?
+  breakTime   String?
+  status      AttendanceStatus @default(PRESENT)
+  
+  // Location tracking
+  checkInLat  Float?
+  checkInLng  Float?
+  checkOutLat Float?
+  checkOutLng Float?
+  deviceInfo  String?
+
+  employee    Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([employeeId, date])
+  @@index([employeeId])
+  @@index([date])
+}
+
+model LeaveRequest {
+  id          String      @id @default(cuid())
+  employeeId  String
+  leaveType   LeaveType
+  startDate   DateTime
+  endDate     DateTime
+  duration    Int         // Number of days
+  reason      String
+  status      LeaveStatus @default(PENDING)
+  attachment  String?     // Cloudinary URL
+  
+  approvedBy  String?
+  approvedAt  DateTime?
+  comments    String?
+
+  employee    Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([startDate])
+}
+
+model SalaryComponent {
+  id              String   @id @default(cuid())
+  employeeId      String
+  monthYear       String   // Format: YYYY-MM
+  
+  // Basic Salary Info
+  monthlyWage     Float
+  
+  // Earnings
+  basicSalary     Float
+  hra             Float    // House Rent Allowance
+  standardAllowance Float
+  performanceBonus Float?
+  lta             Float?   // Leave Travel Allowance
+  fixedAllowance  Float?
+  otherEarnings   Float?
+  
+  // Deductions
+  pfEmployee      Float    // Provident Fund - Employee
+  pfEmployer      Float    // Provident Fund - Employer
+  professionalTax Float
+  otherDeductions Float?
+  
+  // Calculated Totals
+  grossSalary     Float
+  totalDeductions Float
+  netSalary       Float
+  
+  // Attendance-based
+  totalWorkingDays Int?
+  presentDays     Int?
+  payableDays     Int?
+  proRatedAmount  Float?
+
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([employeeId, monthYear])
+  @@index([employeeId])
+  @@index([monthYear])
+}
+
+model OTP {
+  id        String   @id @default(cuid())
+  userId    String
+  otpHash   String
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  metadata  Json?            // Additional data like leaveId, actionBy, etc.
+  
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
