@@ -218,6 +218,7 @@ export class LeaveService {
                     id: r.employee.userId,
                     name: `${r.employee.user.firstName} ${r.employee.user.lastName}`,
                     department: r.employee.department,
+                    employeeCode: r.employee.employeeCode,
                 },
                 leaveType: r.leaveType,
                 startDate: formatDate(r.startDate),

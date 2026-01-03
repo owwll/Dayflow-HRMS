@@ -116,9 +116,17 @@ export class ProfileService {
         const employeeData: any = {};
 
         for (const [key, value] of Object.entries(data)) {
+            // Skip empty strings and null values (but allow 0 and false)
+            if (value === '' || value === null || value === undefined) {
+                continue;
+            }
+
             if (allowedFields.includes(key)) {
                 if (['firstName', 'lastName', 'email', 'profilePicUrl'].includes(key)) {
                     filteredData[key] = value;
+                } else if (key === 'dateOfBirth' && value) {
+                    // Convert date string to DateTime
+                    employeeData[key] = new Date(value as string);
                 } else {
                     employeeData[key] = value;
                 }
@@ -126,7 +134,7 @@ export class ProfileService {
         }
 
         // Update user and employee
-        await prisma.$transaction(async (tx) => {
+        const updatedUser = await prisma.$transaction(async (tx) => {
             if (Object.keys(filteredData).length > 0) {
                 await tx.user.update({
                     where: { id: userId },
@@ -140,7 +148,72 @@ export class ProfileService {
                     data: employeeData,
                 });
             }
+
+            // Fetch updated user with employee data
+            return await tx.user.findUnique({
+                where: { id: userId },
+                include: {
+                    employee: {
+                        include: {
+                            manager: {
+                                include: {
+                                    user: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            });
         });
+
+        if (!updatedUser) {
+            throw new NotFoundError('User not found after update');
+        }
+
+        const employee = updatedUser.employee;
+
+        // Return updated profile in the same format as getProfile
+        return {
+            personal: {
+                id: updatedUser.id,
+                firstName: updatedUser.firstName,
+                lastName: updatedUser.lastName,
+                email: updatedUser.email,
+                phone: employee?.phone,
+                profilePic: updatedUser.profilePicUrl,
+                dateOfBirth: employee?.dateOfBirth,
+                gender: employee?.gender,
+                maritalStatus: employee?.maritalStatus,
+                nationality: employee?.nationality,
+                address: employee?.address,
+            },
+            professional: {
+                employeeCode: employee?.employeeCode,
+                loginId: updatedUser.loginId,
+                company: employee?.company,
+                department: employee?.department,
+                jobPosition: employee?.jobPosition,
+                manager: employee?.manager ? {
+                    id: employee.manager.userId,
+                    name: `${employee.manager.user.firstName} ${employee.manager.user.lastName}`,
+                    email: employee.manager.user.email,
+                } : null,
+                location: employee?.location,
+                dateOfJoining: employee?.dateOfJoining,
+                workSchedule: {
+                    workingDays: employee?.workingDays,
+                    dailyHours: employee?.dailyHours,
+                    breakTime: employee?.breakTime,
+                },
+            },
+            bank: {
+                accountNumber: employee?.accountNumber,
+                bankName: employee?.bankName,
+                ifscCode: employee?.ifscCode,
+                panNumber: employee?.panNumber,
+                uanNumber: employee?.uanNumber,
+            },
+        };
     }
 
     /**

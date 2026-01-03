@@ -42,7 +42,7 @@ export class AdminService {
             },
             skip,
             take: limit,
-            orderBy: { createdAt: 'desc' },
+            orderBy: { id: 'desc' },
         });
 
         const total = await prisma.employee.count({ where });
@@ -51,7 +51,7 @@ export class AdminService {
         today.setHours(0, 0, 0, 0);
 
         const employeeData = await Promise.all(
-            employees.map(async (emp) => {
+            employees.map(async (emp: any) => {
                 const attendance = await prisma.attendance.findFirst({
                     where: {
                         employeeId: emp.id,
@@ -117,7 +117,7 @@ export class AdminService {
     /**
      * Update employee status
      */
-    async updateEmployeeStatus(employeeId: string, status: EmployeeStatus, reason?: string) {
+    async updateEmployeeStatus(employeeId: string, status: EmployeeStatus, _reason?: string) {
         const employee = await prisma.employee.findFirst({
             where: { userId: employeeId },
         });

@@ -28,7 +28,7 @@ export class ProfileController {
     async updateProfile(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const { userId } = req.params;
-            await profileService.updateProfile(
+            const result = await profileService.updateProfile(
                 userId,
                 req.user!.userId,
                 req.user!.role,
@@ -38,6 +38,7 @@ export class ProfileController {
             const response: ApiResponse = {
                 success: true,
                 message: 'Profile updated successfully',
+                data: result,
             };
 
             res.status(200).json(response);

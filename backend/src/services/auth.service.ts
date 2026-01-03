@@ -187,7 +187,7 @@ export class AuthService {
         });
 
         // Generate tokens
-        const accessToken = this.generateAccessToken(user);
+        const accessToken = this.generateAccessToken(user as any);
         const refreshToken = await this.generateRefreshToken(user.id);
 
         return {
@@ -247,7 +247,7 @@ export class AuthService {
             throw new UnauthorizedError('Invalid or expired refresh token');
         }
 
-        const accessToken = this.generateAccessToken(tokenRecord.user);
+        const accessToken = this.generateAccessToken(tokenRecord.user as any);
 
         return { accessToken };
     }
@@ -255,7 +255,7 @@ export class AuthService {
     /**
      * Generate access token
      */
-    private generateAccessToken(user: { id: string; email: string; role: Role }): string {
+    private generateAccessToken(user: { id: string; email: string; role: any }): string {
         const payload: JWTPayload = {
             userId: user.id,
             email: user.email,
@@ -264,7 +264,7 @@ export class AuthService {
 
         return jwt.sign(payload, process.env.JWT_ACCESS_SECRET!, {
             expiresIn: process.env.JWT_ACCESS_EXPIRY || '15m',
-        });
+        } as any);
     }
 
     /**
@@ -273,7 +273,7 @@ export class AuthService {
     private async generateRefreshToken(userId: string): Promise<string> {
         const token = jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET!, {
             expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d',
-        });
+        } as any);
 
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
